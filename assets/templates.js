@@ -83,6 +83,7 @@ window.TEMPLATES = {
     labelField: 'hotNote',
     categoryField: null,
     agg: 'sum',
+    dateMaxDriftDays: 8,   // 周报周期与截图日期最多差一周：图内日期偏差超过此值视为 OCR 误读
     numericOptions: [
       { key: 'views', label: '本周观看' },
       { key: 'likes', label: '本周获赞' },

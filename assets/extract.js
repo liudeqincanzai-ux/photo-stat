@@ -250,31 +250,75 @@ window.Extract = (function () {
   const PARSERS = { receipt: parseReceipt, checklist: parseChecklist, meter: parseMeter, score: parseScore, xhsweekly: parseXhsWeekly };
 
   /* 小红书创作者周报：一张图 = 一条周记录
-     版式：本周观看 728 -8% / 本周获赞 54 -3% / 本周涨粉 6 -
-           本周最热笔记 <标题> / 新增观看 新增点赞 新增评论 / 584 53 5 */
+     真实版式（OCR 输出）：
+       本周观看   本周获赞   本周涨粉     ← 三列标签行
+       5606       264        38          ← 真实数字行
+       +76%       +62%       +46%        ← 百分比行（必须跳过！）
+       新增观看 新增点赞 新增评论
+       2396 172 10 */
+  function numbersNoPercent(s) {
+    // 先剔除所有带 % 的数字（如 +76%、-38%），避免把环比百分比当指标值
+    const t = normalize(s).replace(/-?\d[\d,]*(?:\.\d+)?\s*%/g, ' ');
+    return numbersIn(t);
+  }
+
+  function isPercentLine(s) {
+    const t = normalize(s);
+    return numbersIn(t).length > 0 && numbersNoPercent(t).length === 0;
+  }
+
   function parseXhsWeekly(text) {
     const ls = lines(text);
     const f = { date: '', views: '', likes: '', fans: '', hotNote: '', hotViews: '', hotLikes: '', hotComments: '' };
 
+    // 取第 i 行下方 span 行内最近的"真实数字行"（跳过空行和百分比行）
+    function numsBelow(i, span) {
+      for (let j = i + 1; j <= i + span && j < ls.length; j++) {
+        const t2 = normalize(ls[j]);
+        if (!t2) continue;
+        if (isPercentLine(t2)) continue;
+        const n = numbersNoPercent(t2);
+        if (n.length) return n;
+      }
+      return [];
+    }
+
     ls.forEach((l, i) => {
       const t = normalize(l);
-      // 数字可能在关键词同一行，也可能在下一行（卡片式版式 OCR 常拆行）
-      const numHereOrBelow = () => {
-        let n = numbersIn(t);
-        if (!n.length && ls[i + 1]) n = numbersIn(normalize(ls[i + 1]));
-        return n;
-      };
-      if (!f.views && /周观看/.test(t)) { const n = numHereOrBelow(); if (n.length) f.views = n[0]; }
-      if (!f.likes && /获赞|点赞/.test(t)) { const n = numHereOrBelow(); if (n.length) f.likes = n[0]; }
-      if (!f.fans && /涨粉/.test(t)) { const n = numHereOrBelow(); if (n.length) f.fans = n[0]; }
-      if (/新增观看/.test(t)) {
-        let nums = numbersIn(t);
-        if (nums.length < 3 && ls[i + 1]) nums = numbersIn(normalize(ls[i + 1]));
+      if (!t) return;
+
+      // 三列指标卡：同一行出现两个以上指标词（排除"新增…"汇总行）
+      const hits = (t.match(/观看|获赞|点赞|涨粉/g) || []).length;
+      if (hits >= 2 && !/新增/.test(t)) {
+        const nums = numsBelow(i, 3);
+        if (nums.length >= 2 && !f.views) {
+          f.views = nums[0];
+          f.likes = nums[1];
+          if (nums.length >= 3) f.fans = nums[2];
+          return;
+        }
+      }
+      if (/新增观看/.test(t) && !f.hotViews) {
+        const nums = numsBelow(i, 2);
         if (nums.length >= 3) { f.hotViews = nums[0]; f.hotLikes = nums[1]; f.hotComments = nums[2]; }
         else if (nums.length === 2) { f.hotViews = nums[0]; f.hotLikes = nums[1]; }
         else if (nums.length === 1) f.hotViews = nums[0];
       }
     });
+
+    // 兜底：三列行没凑齐时按单个关键词找（同样排除百分比与"新增"行）
+    if (!f.views || !f.likes || !f.fans) {
+      ls.forEach((l, i) => {
+        const t = normalize(l);
+        if (!t || /新增/.test(t)) return;
+        if (!f.views && /周观看/.test(t)) {
+          const n = numbersNoPercent(t).length ? numbersNoPercent(t) : numsBelow(i, 2);
+          if (n.length) f.views = n[0];
+        }
+        if (!f.likes && /获赞|点赞/.test(t)) { const n = numsBelow(i, 2); if (n.length) f.likes = n[0]; }
+        if (!f.fans && /涨粉/.test(t)) { const n = numsBelow(i, 2); if (n.length) f.fans = n[0]; }
+      });
+    }
 
     // 最热笔记标题：含较多中文、且不含指标关键词的最长行
     const EXCL = /观看|获赞|点赞|涨粉|评论|周报|创作者|最热|笔记|新增|上滑|查看|完整|更多|数据|本周|时差|下降/;
@@ -445,11 +489,19 @@ window.Extract = (function () {
       })
       .then(r => {
         if (!r.rows.length) r.rows = [window.emptyFields(tpl)];
-        // 日期兜底：图片内容里没识别到日期时，用文件名里的日期（如 Screenshot_2026-03-09-...），
-        // 避免全部落到入库时间、导致所有记录挤在同一天
+        // 日期兜底：优先图内日期；图内没有或与文件名日期偏差超过模板阈值（dateMaxDriftDays，
+        // 用于周报类模板剔除 OCR 误读日期）时，改用文件名日期；最后才用入库时间
         const fb = dateFromFilename(file.name);
         if (fb) {
-          r.rows.forEach(row => { if (!row[tpl.dateField]) row[tpl.dateField] = fb; });
+          const maxDrift = tpl.dateMaxDriftDays || 0;
+          r.rows.forEach(row => {
+            const cur = row[tpl.dateField];
+            if (!cur) { row[tpl.dateField] = fb; return; }
+            if (maxDrift) {
+              const d = Math.abs((new Date(cur) - new Date(fb)) / 86400000);
+              if (!isNaN(d) && d > maxDrift) row[tpl.dateField] = fb;
+            }
+          });
         }
         return r;
       });
