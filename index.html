@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>照片数据自动拾取统计台</title>
-<link rel="stylesheet" href="assets/style.css?v=3">
+<link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
 
@@ -88,12 +88,13 @@
   <section class="card">
     <div class="card-head">
       <h2>3 · 统计看板</h2>
+      <select id="metricSelect" class="mini-select" hidden></select>
       <span id="scopeLabel" class="hint"></span>
     </div>
     <div id="metrics" class="metrics"></div>
     <div class="charts">
       <div class="chart-box"><h3><span>按日期统计</span><select id="trendMode" class="mini-select"><option value="count">每个日期的条数</option><option value="value">数值合计</option></select></h3><canvas id="chartTrend"></canvas></div>
-      <div class="chart-box"><h3>分类构成</h3><canvas id="chartPie"></canvas></div>
+      <div class="chart-box"><h3 id="pieTitle">分类构成</h3><canvas id="chartPie"></canvas></div>
       <div class="chart-box"><h3>排行 TOP 10</h3><canvas id="chartRank"></canvas></div>
     </div>
     <p id="chartEmpty" class="empty" hidden>暂无数据，入库后自动绘制图表</p>
@@ -181,9 +182,9 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <!-- 本地资源带版本号：GitHub Pages 对静态文件缓存 10 分钟，改版后必须递增，否则用户拿到旧文件 -->
-<script src="assets/templates.js?v=3"></script>
-<script src="assets/store.js?v=3"></script>
-<script src="assets/extract.js?v=3"></script>
-<script src="assets/app.js?v=3"></script>
+<script src="assets/templates.js?v=4"></script>
+<script src="assets/store.js?v=4"></script>
+<script src="assets/extract.js?v=4"></script>
+<script src="assets/app.js?v=4"></script>
 </body>
 </html>

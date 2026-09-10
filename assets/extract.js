@@ -247,7 +247,48 @@ window.Extract = (function () {
     return rows.length ? rows : [{ date, name: '', subject: '', score: '', class: '', note: '' }];
   }
 
-  const PARSERS = { receipt: parseReceipt, checklist: parseChecklist, meter: parseMeter, score: parseScore };
+  const PARSERS = { receipt: parseReceipt, checklist: parseChecklist, meter: parseMeter, score: parseScore, xhsweekly: parseXhsWeekly };
+
+  /* 小红书创作者周报：一张图 = 一条周记录
+     版式：本周观看 728 -8% / 本周获赞 54 -3% / 本周涨粉 6 -
+           本周最热笔记 <标题> / 新增观看 新增点赞 新增评论 / 584 53 5 */
+  function parseXhsWeekly(text) {
+    const ls = lines(text);
+    const f = { date: '', views: '', likes: '', fans: '', hotNote: '', hotViews: '', hotLikes: '', hotComments: '' };
+
+    ls.forEach((l, i) => {
+      const t = normalize(l);
+      // 数字可能在关键词同一行，也可能在下一行（卡片式版式 OCR 常拆行）
+      const numHereOrBelow = () => {
+        let n = numbersIn(t);
+        if (!n.length && ls[i + 1]) n = numbersIn(normalize(ls[i + 1]));
+        return n;
+      };
+      if (!f.views && /周观看/.test(t)) { const n = numHereOrBelow(); if (n.length) f.views = n[0]; }
+      if (!f.likes && /获赞|点赞/.test(t)) { const n = numHereOrBelow(); if (n.length) f.likes = n[0]; }
+      if (!f.fans && /涨粉/.test(t)) { const n = numHereOrBelow(); if (n.length) f.fans = n[0]; }
+      if (/新增观看/.test(t)) {
+        let nums = numbersIn(t);
+        if (nums.length < 3 && ls[i + 1]) nums = numbersIn(normalize(ls[i + 1]));
+        if (nums.length >= 3) { f.hotViews = nums[0]; f.hotLikes = nums[1]; f.hotComments = nums[2]; }
+        else if (nums.length === 2) { f.hotViews = nums[0]; f.hotLikes = nums[1]; }
+        else if (nums.length === 1) f.hotViews = nums[0];
+      }
+    });
+
+    // 最热笔记标题：含较多中文、且不含指标关键词的最长行
+    const EXCL = /观看|获赞|点赞|涨粉|评论|周报|创作者|最热|笔记|新增|上滑|查看|完整|更多|数据|本周|时差|下降/;
+    let best = '', bestLen = 0;
+    ls.forEach(l => {
+      if (EXCL.test(l)) return;
+      const cjk = (l.match(/[\u4e00-\u9fa5]/g) || []).length;
+      if (cjk >= 4 && cjk > bestLen) { bestLen = cjk; best = l; }
+    });
+    f.hotNote = best.trim();
+
+    f.date = findDate(text);
+    return [f];
+  }
 
   /* ============ Tesseract 本地 OCR ============ */
 

@@ -27,6 +27,33 @@
     return window.TEMPLATES[S.settings.template] || window.TEMPLATES.receipt;
   }
 
+  /* 多指标模板（如创作者周报）的统计口径切换 */
+  function metricField() {
+    const tpl = currentTpl();
+    const sel = $('metricSelect');
+    if (!sel.hidden && sel.value) return sel.value;
+    return tpl.numericField;
+  }
+
+  function metricLabel() {
+    const tpl = currentTpl();
+    const sel = $('metricSelect');
+    if (!sel.hidden && sel.value) {
+      const o = (tpl.numericOptions || []).find(x => x.key === sel.value);
+      if (o) return o.label;
+    }
+    return tpl.numericLabel;
+  }
+
+  function buildMetricSelect() {
+    const tpl = currentTpl();
+    const sel = $('metricSelect');
+    if (!tpl.numericOptions) { sel.hidden = true; sel.innerHTML = ''; return; }
+    sel.hidden = false;
+    sel.innerHTML = tpl.numericOptions.map(o => '<option value="' + o.key + '">' + o.label + '</option>').join('');
+    sel.value = tpl.numericField;
+  }
+
   /* ---------- 模板下拉 ---------- */
   function initTemplates() {
     const sel = $('tplSelect');
@@ -43,8 +70,10 @@
       drafts = [];
       renderDrafts();
       $('fCategory').value = '';
+      buildMetricSelect();
       renderAll();
     };
+    buildMetricSelect();
   }
 
   /* ---------- 图片队列 ---------- */
@@ -264,8 +293,8 @@
 
   /* ---------- 统计与图表 ---------- */
   function renderMetrics(list) {
-    const tpl = currentTpl();
-    const nf = tpl.numericField;
+    const nf = metricField();
+    const nl = metricLabel();
     const nums = list.map(r => parseFloat(r.fields[nf])).filter(n => !isNaN(n));
     const sum = nums.reduce((a, b) => a + b, 0);
     const avg = nums.length ? sum / nums.length : null;
@@ -273,8 +302,8 @@
     const min = nums.length ? Math.min.apply(null, nums) : null;
     const items = [
       ['记录数', list.length + ' 条'],
-      [tpl.numericLabel + '合计', fmt(nums.length ? sum : null)],
-      [tpl.numericLabel + '平均', fmt(avg)],
+      [nl + '合计', fmt(nums.length ? sum : null)],
+      [nl + '平均', fmt(avg)],
       ['最大值', fmt(max)],
       ['最小值', fmt(min)]
     ];
@@ -310,7 +339,8 @@
 
   function renderCharts(list) {
     const tpl = currentTpl();
-    const nf = tpl.numericField;
+    const nf = metricField();
+    const nl = metricLabel();
     const agg = tpl.agg || 'sum';
     $('chartEmpty').hidden = list.length > 0;
 
@@ -328,7 +358,7 @@
       data: {
         labels: trend.map(t => t.key),
         datasets: [{
-          label: mode === 'count' ? '记录条数' : tpl.numericLabel + (agg === 'avg' ? '（平均）' : '（合计）'),
+          label: mode === 'count' ? '记录条数' : nl + (agg === 'avg' ? '（平均）' : '（合计）'),
           data: trend.map(t => Math.round((mode === 'count' ? t.count : t.value) * 100) / 100),
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37,99,235,.12)',
@@ -338,8 +368,9 @@
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
 
-    // 分类构成
-    const cat = groupBy(list, r => r.fields[tpl.categoryField], nf, agg);
+    // 构成占比：有分类字段按分类，没有则按月份
+    $('pieTitle').textContent = tpl.categoryField ? '分类构成' : '月度构成';
+    const cat = groupBy(list, r => tpl.categoryField ? r.fields[tpl.categoryField] : (r.fields[tpl.dateField] || '').slice(0, 7), nf, agg);
     cat.sort((a, b) => b.sum - a.sum);
     const top = cat.slice(0, 8);
     if (cat.length > 8) {
@@ -364,7 +395,7 @@
       data: {
         labels: top10.map(t => t.key),
         datasets: [{
-          label: tpl.numericLabel + (agg === 'avg' ? '（平均）' : '（合计）'),
+          label: nl + (agg === 'avg' ? '（平均）' : '（合计）'),
           data: top10.map(t => Math.round(t.value * 100) / 100),
           backgroundColor: '#2563eb', borderRadius: 4
         }]
@@ -458,6 +489,7 @@
     updateEngineBadge();
 
     $('trendMode').onchange = renderAll;
+    $('metricSelect').onchange = renderAll;
 
     ['fDateFrom', 'fDateTo', 'fCategory', 'fKeyword'].forEach(id => {
       $(id).addEventListener('input', renderAll);

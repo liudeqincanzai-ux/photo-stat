@@ -72,10 +72,37 @@ window.TEMPLATES = {
       { key: 'class',   label: '班级', type: 'text' },
       { key: 'note',    label: '备注', type: 'text' }
     ]
+  },
+
+  xhsweekly: {
+    id: 'xhsweekly',
+    name: '创作者周报（小红书）',
+    numericField: 'views',
+    numericLabel: '本周观看',
+    dateField: 'date',
+    labelField: 'hotNote',
+    categoryField: null,
+    agg: 'sum',
+    numericOptions: [
+      { key: 'views', label: '本周观看' },
+      { key: 'likes', label: '本周获赞' },
+      { key: 'fans', label: '本周涨粉' },
+      { key: 'hotViews', label: '最热笔记·观看' }
+    ],
+    fields: [
+      { key: 'date',        label: '日期',       type: 'date' },
+      { key: 'views',       label: '本周观看',   type: 'number' },
+      { key: 'likes',       label: '本周获赞',   type: 'number' },
+      { key: 'fans',        label: '本周涨粉',   type: 'number' },
+      { key: 'hotNote',     label: '最热笔记',   type: 'text' },
+      { key: 'hotViews',    label: '笔记·观看',  type: 'number' },
+      { key: 'hotLikes',    label: '笔记·点赞',  type: 'number' },
+      { key: 'hotComments', label: '笔记·评论',  type: 'number' }
+    ]
   }
 };
 
-window.TEMPLATE_ORDER = ['receipt', 'checklist', 'meter', 'score'];
+window.TEMPLATE_ORDER = ['receipt', 'checklist', 'meter', 'score', 'xhsweekly'];
 
 /* 取模板的默认字段集合（值为空串） */
 window.emptyFields = function (tpl) {
