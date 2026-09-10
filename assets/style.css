@@ -205,6 +205,7 @@ table.grid td.num input { text-align: right; }
   background: rgba(15, 23, 42, .4);
   display: flex; align-items: center; justify-content: center; padding: 20px;
 }
+.modal[hidden] { display: none; }   /* 修复：display:flex 会覆盖 hidden 属性，导致弹窗关不掉 */
 .modal-body {
   background: var(--surface); border-radius: 12px; padding: 20px;
   width: min(620px, 100%); max-height: 90vh; overflow-y: auto;
