@@ -190,7 +190,8 @@ table.grid td.num input { text-align: right; }
 
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
 .chart-box { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-.chart-box h3 { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
+.chart-box h3 { font-size: 13px; color: var(--text-2); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mini-select { width: auto !important; height: 26px !important; font-size: 12px; padding: 0 6px; min-width: 0; }
 .chart-box canvas { width: 100% !important; height: 240px !important; }
 
 .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }

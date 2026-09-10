@@ -319,16 +319,17 @@
       return;
     }
 
-    // 趋势：按日期聚合
+    // 趋势：按日期聚合；口径可切换（每日条数 / 数值合计）
     const trend = groupBy(list, r => (r.fields[tpl.dateField] || '').slice(0, 10) || new Date(r.createdAt).toISOString().slice(0, 10), nf, agg);
     trend.sort((a, b) => a.key < b.key ? -1 : 1);
+    const mode = $('trendMode') ? $('trendMode').value : 'count';
     drawChart('chartTrend', {
       type: 'line',
       data: {
         labels: trend.map(t => t.key),
         datasets: [{
-          label: tpl.numericLabel + (agg === 'avg' ? '（平均）' : '（合计）'),
-          data: trend.map(t => Math.round(t.value * 100) / 100),
+          label: mode === 'count' ? '记录条数' : tpl.numericLabel + (agg === 'avg' ? '（平均）' : '（合计）'),
+          data: trend.map(t => Math.round((mode === 'count' ? t.count : t.value) * 100) / 100),
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37,99,235,.12)',
           tension: .3, fill: true, pointRadius: 3
@@ -455,6 +456,8 @@
     };
     $('engineSelect').value = S.settings.engine;
     updateEngineBadge();
+
+    $('trendMode').onchange = renderAll;
 
     ['fDateFrom', 'fDateTo', 'fCategory', 'fKeyword'].forEach(id => {
       $(id).addEventListener('input', renderAll);

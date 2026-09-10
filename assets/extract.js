@@ -47,6 +47,13 @@ window.Extract = (function () {
     return Y >= 1900 && Y <= 2200 && M >= 1 && M <= 12 && D >= 1 && D <= 31;
   }
 
+  // 从文件名提取日期：Screenshot_2026-03-09-16-30-00、IMG_20260309_1200 等
+  function dateFromFilename(name) {
+    const m = String(name).match(/(?:^|[^\d])(\d{4})[-_.]?(\d{2})[-_.]?(\d{2})(?:[^\d]|$)/);
+    if (m && validYmd(m[1], m[2], m[3])) return pad(m[1], m[2], m[3]);
+    return '';
+  }
+
   function findDate(text) {
     const t = normalize(text);
     let m = t.match(/(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})/);
@@ -397,9 +404,15 @@ window.Extract = (function () {
       })
       .then(r => {
         if (!r.rows.length) r.rows = [window.emptyFields(tpl)];
+        // 日期兜底：图片内容里没识别到日期时，用文件名里的日期（如 Screenshot_2026-03-09-...），
+        // 避免全部落到入库时间、导致所有记录挤在同一天
+        const fb = dateFromFilename(file.name);
+        if (fb) {
+          r.rows.forEach(row => { if (!row[tpl.dateField]) row[tpl.dateField] = fb; });
+        }
         return r;
       });
   }
 
-  return { run, ocrText, aiExtract, parse: (t, id) => (PARSERS[id] || parseReceipt)(normalize(t)) };
+  return { run, ocrText, aiExtract, dateFromFilename, parse: (t, id) => (PARSERS[id] || parseReceipt)(normalize(t)) };
 })();
