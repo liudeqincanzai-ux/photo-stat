@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>照片数据自动拾取统计台</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">PS</span>
+    <div>
+      <h1>照片数据自动拾取统计台</h1>
+      <p class="sub">上传照片 → 自动识别字段 → 校对入库 → 统计看板</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btnSettings" class="btn ghost">设置</button>
+    <button id="btnExportCsv" class="btn ghost">导出 CSV</button>
+    <button id="btnExportJson" class="btn ghost">导出 JSON</button>
+    <button id="btnImport" class="btn ghost">导入</button>
+    <input type="file" id="fileImport" accept="application/json,.json" hidden>
+  </div>
+</header>
+
+<main>
+  <!-- 1. 上传与识别 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>1 · 上传照片并识别</h2>
+      <span id="engineBadge" class="badge">识别引擎：本地 OCR</span>
+    </div>
+
+    <div class="row">
+      <label class="field">
+        <span>数据模板</span>
+        <select id="tplSelect"></select>
+      </label>
+      <label class="field">
+        <span>识别引擎</span>
+        <select id="engineSelect">
+          <option value="ocr">本地 OCR（免费 · 照片不出本机）</option>
+          <option value="ai">AI 视觉识别（需 API Key · 准确率高）</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="dropzone" class="dropzone">
+      <input type="file" id="filePicker" accept="image/*" multiple hidden>
+      <p class="dz-title">拖拽照片到这里，或点击选择</p>
+      <p class="dz-hint">支持多选、也可直接 Ctrl+V 粘贴截图；移动端可调用摄像头拍照</p>
+    </div>
+
+    <div id="previewStrip" class="preview-strip"></div>
+
+    <div class="row end">
+      <button id="btnClearQueue" class="btn ghost">清空待识别</button>
+      <button id="btnRun" class="btn primary">开始识别</button>
+    </div>
+
+    <div id="progressWrap" class="progress-wrap" hidden>
+      <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+      <p id="progressText" class="progress-text"></p>
+    </div>
+  </section>
+
+  <!-- 2. 校对 -->
+  <section class="card" id="draftCard" hidden>
+    <div class="card-head">
+      <h2>2 · 校对识别结果</h2>
+      <span class="hint">识别结果可直接修改，确认无误后入库</span>
+    </div>
+    <div class="table-scroll">
+      <table class="grid" id="draftTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="row end">
+      <button id="btnDropDrafts" class="btn ghost">丢弃结果</button>
+      <button id="btnSaveDrafts" class="btn primary">全部入库</button>
+    </div>
+  </section>
+
+  <!-- 3. 看板 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>3 · 统计看板</h2>
+      <span id="scopeLabel" class="hint"></span>
+    </div>
+    <div id="metrics" class="metrics"></div>
+    <div class="charts">
+      <div class="chart-box"><h3>数量趋势</h3><canvas id="chartTrend"></canvas></div>
+      <div class="chart-box"><h3>分类构成</h3><canvas id="chartPie"></canvas></div>
+      <div class="chart-box"><h3>排行 TOP 10</h3><canvas id="chartRank"></canvas></div>
+    </div>
+    <p id="chartEmpty" class="empty" hidden>暂无数据，入库后自动绘制图表</p>
+  </section>
+
+  <!-- 4. 明细 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>4 · 数据明细</h2>
+      <span id="countLabel" class="hint"></span>
+    </div>
+
+    <div class="filters">
+      <label class="field"><span>开始日期</span><input type="date" id="fDateFrom"></label>
+      <label class="field"><span>结束日期</span><input type="date" id="fDateTo"></label>
+      <label class="field"><span>分类</span><select id="fCategory"></select></label>
+      <label class="field grow"><span>关键词</span><input type="search" id="fKeyword" placeholder="搜索任意字段内容"></label>
+      <button id="btnResetFilter" class="btn ghost">重置</button>
+    </div>
+
+    <div class="table-scroll">
+      <table class="grid" id="recordTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="recordEmpty" class="empty" hidden>当前筛选条件下没有记录</p>
+
+    <div class="row end">
+      <button id="btnClearAll" class="btn danger-ghost">清空全部数据</button>
+    </div>
+  </section>
+</main>
+
+<!-- 设置弹窗 -->
+<div id="settingsModal" class="modal" hidden>
+  <div class="modal-body">
+    <div class="card-head">
+      <h2>设置</h2>
+      <button id="btnCloseSettings" class="btn ghost">关闭</button>
+    </div>
+
+    <h3 class="sec">AI 视觉识别（可选）</h3>
+    <p class="hint block">不填也能正常使用本地 OCR。API Key 仅保存在你自己的浏览器里，不会上传到任何第三方服务器（本站点本身也不含后端）。</p>
+    <div class="row">
+      <label class="field grow">
+        <span>服务商预设</span>
+        <select id="aiPreset">
+          <option value="custom">自定义（OpenAI 兼容接口）</option>
+          <option value="openai">OpenAI</option>
+          <option value="glm">智谱 GLM</option>
+          <option value="qwen">阿里云百炼（通义千问 VL）</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>API Base URL</span><input type="text" id="aiBase" placeholder="https://api.openai.com/v1"></label>
+      <label class="field grow"><span>模型</span><input type="text" id="aiModel" placeholder="gpt-4o-mini"></label>
+    </div>
+    <label class="field"><span>API Key</span><input type="password" id="aiKey" placeholder="sk-..."></label>
+    <p class="hint block">注意：部分服务商的接口不允许浏览器直接调用（CORS 限制），若识别时报网络错误，请换用支持跨域的服务商或在服务端做转发。</p>
+
+    <h3 class="sec">本地 OCR</h3>
+    <div class="row">
+      <label class="field grow"><span>识别语言</span>
+        <select id="ocrLang">
+          <option value="chi_sim+eng">中文简体 + 英文（推荐）</option>
+          <option value="chi_sim">中文简体</option>
+          <option value="eng">英文/数字</option>
+          <option value="chi_tra+eng">中文繁体 + 英文</option>
+          <option value="jpn+eng">日文 + 英文</option>
+        </select>
+      </label>
+      <label class="field grow"><span>traineddata 地址（可选）</span><input type="text" id="ocrLangPath" placeholder="留空使用官方默认地址"></label>
+    </div>
+
+    <div class="row end">
+      <button id="btnSaveSettings" class="btn primary">保存设置</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="assets/templates.js"></script>
+<script src="assets/store.js"></script>
+<script src="assets/extract.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
