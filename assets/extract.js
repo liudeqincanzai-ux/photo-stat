@@ -54,6 +54,37 @@ window.Extract = (function () {
     return '';
   }
 
+  /* 把周期串（"03.02 - 03.08" / "2026-03-02 至 2026-03-08"）规范化成 "YYYY-MM-DD ~ MM-DD"，
+     缺年份时用参照日期（文件名日期）的年份补全；跨年周期自动进位 */
+  function buildPeriod(raw, refDate) {
+    if (!raw) return '';
+    const t = normalize(raw);
+    const m = t.match(/(\d{4})?[-/.年]?\s*(\d{1,2})[-/.月](\d{1,2})\s*[-–—~至到]\s*(?:(\d{4})[-/.年]?\s*)?(\d{1,2})(?:[-/.月](\d{1,2}))?/);
+    if (!m) return '';
+    const startM = +m[2], startD = +m[3], endM = +m[5], endD = m[6] ? +m[6] : startD;
+    if (startM < 1 || startM > 12 || startD < 1 || startD > 31 || endM < 1 || endM > 12 || endD < 1 || endD > 31) return '';
+    let y = m[1] ? +m[1] : (refDate ? +refDate.slice(0, 4) : new Date().getFullYear());
+    let y2 = m[4] ? +m[4] : y;
+    if (!m[1] && !m[4] && refDate) {
+      // 以截图日期的月份为锚判断跨年：周期只会与截图日相邻
+      const rm = +refDate.slice(5, 7);
+      if (startM - rm > 6) { y = y - 1; y2 = y + 1; }   // 周期从截图日的上一年12月开始
+      else if (rm - endM > 6) { y2 = y + 1; }           // 周期跨到截图日的下一年1月
+    }
+    const start = pad(y, startM, startD);
+    const end = pad(y2, endM, endD);
+    return y2 === y ? start + ' ~ ' + end.slice(5) : start + ' ~ ' + end;
+  }
+
+  // 以截图日为周期终点，往前推 6 天生成周期（OCR 没抓到周期行时的兜底）
+  function periodFromRef(refDate) {
+    if (!refDate) return '';
+    const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const start = new Date(refDate + 'T00:00:00');
+    start.setDate(start.getDate() - 6);
+    return iso(start) + ' ~ ' + refDate.slice(5);
+  }
+
   function findDate(text) {
     const t = normalize(text);
     let m = t.match(/(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})/);
@@ -269,7 +300,15 @@ window.Extract = (function () {
 
   function parseXhsWeekly(text) {
     const ls = lines(text);
-    const f = { date: '', views: '', likes: '', fans: '', hotNote: '', hotViews: '', hotLikes: '', hotComments: '' };
+    const f = { date: '', period: '', views: '', likes: '', fans: '', hotNote: '', hotViews: '', hotLikes: '', hotComments: '' };
+
+    // 周期行：如 "08.24 - 08.30"（年份由文件名日期在入库时补全）
+    const pm = normalize(text).match(/(\d{1,2})[.月](\d{1,2})\s*[-–—~至到]\s*(\d{1,2})[.月]?(\d{1,2})?/);
+    if (pm) {
+      f.period = pm[1] + '.' + pm[2] + ' - ' + pm[3] + (pm[4] ? '.' + pm[4] : '');
+      // 周期开始日是最可靠的 date 来源
+      f.date = pad(new Date().getFullYear(), pm[1], pm[2]);
+    }
 
     // 取第 i 行下方 span 行内最近的"真实数字行"（跳过空行和百分比行）
     function numsBelow(i, span) {
@@ -330,7 +369,12 @@ window.Extract = (function () {
     });
     f.hotNote = best.trim();
 
-    f.date = findDate(text);
+    // 兜底抓错时会出现"涨粉=观看"的巧合值（三列只识别出部分数字），置空交给人工校对
+    if (f.fans && f.fans === f.views) f.fans = '';
+    if (f.likes && f.likes === f.views) f.likes = '';
+
+    // 没解析到周期行时才退回普通日期识别（年份由入库时的文件名日期修正）
+    if (!f.period) f.date = findDate(text);
     return [f];
   }
 
@@ -489,17 +533,31 @@ window.Extract = (function () {
       })
       .then(r => {
         if (!r.rows.length) r.rows = [window.emptyFields(tpl)];
-        // 日期兜底：优先图内日期；图内没有或与文件名日期偏差超过模板阈值（dateMaxDriftDays，
-        // 用于周报类模板剔除 OCR 误读日期）时，改用文件名日期；最后才用入库时间
+        // 周报类模板（periodField）：以"周期区间"为时间单位；普通模板用单日日期
         const fb = dateFromFilename(file.name);
-        if (fb) {
-          const maxDrift = tpl.dateMaxDriftDays || 0;
+        if (tpl.periodField) {
+          r.rows.forEach(row => {
+            const p = buildPeriod(row[tpl.periodField], fb);
+            if (p) {
+              row[tpl.periodField] = p;
+              row[tpl.dateField] = p.slice(0, 10);   // date = 周期开始日，用于排序/筛选
+            } else if (fb) {
+              row[tpl.periodField] = periodFromRef(fb);
+              if (!row[tpl.dateField]) row[tpl.dateField] = fb;
+            }
+          });
+        } else if (fb) {
+          r.rows.forEach(row => { if (!row[tpl.dateField]) row[tpl.dateField] = fb; });
+        }
+        // 日期误读校正：最终日期与文件名日期偏差超过模板阈值时，信任文件名日期
+        if (fb && tpl.dateMaxDriftDays) {
           r.rows.forEach(row => {
             const cur = row[tpl.dateField];
-            if (!cur) { row[tpl.dateField] = fb; return; }
-            if (maxDrift) {
-              const d = Math.abs((new Date(cur) - new Date(fb)) / 86400000);
-              if (!isNaN(d) && d > maxDrift) row[tpl.dateField] = fb;
+            if (!cur) return;
+            const d = Math.abs((new Date(cur) - new Date(fb)) / 86400000);
+            if (!isNaN(d) && d > tpl.dateMaxDriftDays) {
+              row[tpl.dateField] = fb;
+              if (tpl.periodField) row[tpl.periodField] = periodFromRef(fb);
             }
           });
         }
@@ -507,5 +565,5 @@ window.Extract = (function () {
       });
   }
 
-  return { run, ocrText, aiExtract, dateFromFilename, parse: (t, id) => (PARSERS[id] || parseReceipt)(normalize(t)) };
+  return { run, ocrText, aiExtract, dateFromFilename, buildPeriod, periodFromRef, parse: (t, id) => (PARSERS[id] || parseReceipt)(normalize(t)) };
 })();

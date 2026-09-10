@@ -349,8 +349,11 @@
       return;
     }
 
-    // 趋势：按日期聚合；口径可切换（每日条数 / 数值合计）
-    const trend = groupBy(list, r => (r.fields[tpl.dateField] || '').slice(0, 10) || new Date(r.createdAt).toISOString().slice(0, 10), nf, agg);
+    // 趋势：按日期聚合（周报类模板用周期区间做横轴）；口径可切换（每日条数 / 数值合计）
+    const trend = groupBy(list, r => {
+      if (tpl.periodField && r.fields[tpl.periodField]) return r.fields[tpl.periodField];
+      return (r.fields[tpl.dateField] || '').slice(0, 10) || new Date(r.createdAt).toISOString().slice(0, 10);
+    }, nf, agg);
     trend.sort((a, b) => a.key < b.key ? -1 : 1);
     const mode = $('trendMode') ? $('trendMode').value : 'count';
     drawChart('chartTrend', {

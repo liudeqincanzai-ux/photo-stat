@@ -80,6 +80,7 @@ window.TEMPLATES = {
     numericField: 'views',
     numericLabel: '本周观看',
     dateField: 'date',
+    periodField: 'period',
     labelField: 'hotNote',
     categoryField: null,
     agg: 'sum',
@@ -92,6 +93,7 @@ window.TEMPLATES = {
     ],
     fields: [
       { key: 'date',        label: '日期',       type: 'date' },
+      { key: 'period',      label: '周期',       type: 'text' },
       { key: 'views',       label: '本周观看',   type: 'number' },
       { key: 'likes',       label: '本周获赞',   type: 'number' },
       { key: 'fans',        label: '本周涨粉',   type: 'number' },
